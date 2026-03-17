@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from scraper import crawl_stream
 from predict_platform import predict_platform
+from content_generation import generate_marketing_content
 
 import json
 import asyncio
@@ -27,19 +28,23 @@ def apply_sentiment(product: dict) -> dict:
         scores = [sia.polarity_scores(r)["compound"] for r in reviews]
         avg = round(sum(scores) / len(scores), 3)
         product["avg_sentiment"] = avg
+        product["sentiment_source"] = "reviews"
         return product
 
     if description:
         avg = round(sia.polarity_scores(description)["compound"], 3)
         product["avg_sentiment"] = avg
+        product["sentiment_source"] = "description"
         return product
 
     if name:
         avg = round(sia.polarity_scores(name)["compound"], 3)
         product["avg_sentiment"] = avg
+        product["sentiment_source"] = "name"
         return product
 
     product["avg_sentiment"] = 0.0
+    product["sentiment_source"] = "none"
     return product
 
 
@@ -86,6 +91,7 @@ async def stream_crawl(url: str):
                 try:
                     # platform_name, confidence = predict_platform(product)
                     primary, secondary, primary_conf, secondary_conf = predict_platform(product)
+                    generated_content = generate_marketing_content(product, primary, secondary)
                     
                     # Wrap this in the key Streamlit expects
                     # product["marketing_recommendation"] = {
@@ -100,16 +106,9 @@ async def stream_crawl(url: str):
                     "platform_confidence": primary_conf,
                     "secondary_confidence": secondary_conf,
                     "category": product.get("category", "General"),
-                    "rules_triggered": []
+                    "rules_triggered": [],
+                    "generated_content": generated_content,
 }
-
-                    # Also add sentiment_source so your UI explains it correctly
-                    if product.get("reviews"):
-                        product["sentiment_source"] = "reviews"
-                    elif product.get("description"):
-                        product["sentiment_source"] = "description"
-                    else:
-                        product["sentiment_source"] = "name"
 
                 except Exception as e:
                     print(f"Prediction failed: {e}")
